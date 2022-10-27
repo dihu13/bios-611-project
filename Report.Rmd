@@ -1,0 +1,39 @@
+---
+title: "Game of Throne -- The War of the Five Kings"
+author: "Di Hu"
+date: '2022-10-27'
+output: pdf_document
+---
+
+Read data:
+```{r}
+library(tidyverse)
+library(ggplot2)
+battles <- read_csv("source_data/battles.csv") 
+battles_kings <- battles %>% drop_na(defender_king)
+death <- read_csv("source_data/character-deaths.csv")
+```
+There are in total 38 battles in the War of the Five Kings, while 35 those whose defender/attacter were both for kings. Lets have a glance of the proportion that each king enrolled into those battles.
+```{r}
+attackers <- battles_kings %>%
+        group_by(attacker_king) %>%
+        summarise( n = n()) %>%
+        rename(king = attacker_king) %>%
+        rename(n_attact = n)
+defenders <- battles_kings %>% 
+        group_by(defender_king) %>% 
+        summarise( n = n()) %>%
+        rename( king = defender_king) %>%
+        rename(n_defend = n)
+total <- full_join(attackers, defenders, type = "right") %>%
+        mutate(n_attact = replace(n_attact,is.na(n_attact),0)) %>%
+        mutate(n_total = n_attact + n_defend) %>%
+        mutate(perc= n_total/sum(n_total))  %>% 
+        arrange(perc) %>%
+        mutate(labels = scales::percent(perc))
+ggplot(data = total, aes(x="", y = n_total, fill = king)) +
+        geom_bar(stat = "identity", width=1) +
+        coord_polar("y", start=0) +
+        theme_void() + geom_text(aes(label = labels),
+                                 position = position_stack(vjust = 0.5))
+```
