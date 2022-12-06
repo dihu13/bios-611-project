@@ -2,38 +2,258 @@
 title: "Game of Throne -- The War of the Five Kings"
 author: "Di Hu"
 date: '2022-10-27'
-output: pdf_document
+output: html_document
 ---
 
-Read data:
-```{r}
+```{r,message=FALSE}
 library(tidyverse)
 library(ggplot2)
-battles <- read_csv("source_data/battles.csv") 
+battles <- read.csv("source_data/battles.csv") 
 battles_kings <- battles %>% drop_na(defender_king)
-death <- read_csv("source_data/character-deaths.csv")
 ```
 There are in total 38 battles in the War of the Five Kings, while 35 those whose defender/attacter were both for kings. Lets have a glance of the proportion that each king enrolled into those battles.
 ```{r}
 attackers <- battles_kings %>%
         group_by(attacker_king) %>%
         summarise( n = n()) %>%
-        rename(king = attacker_king) %>%
+        rename(King = attacker_king) %>%
         rename(n_attact = n)
 defenders <- battles_kings %>% 
         group_by(defender_king) %>% 
         summarise( n = n()) %>%
-        rename( king = defender_king) %>%
+        rename( King = defender_king) %>%
         rename(n_defend = n)
-total <- full_join(attackers, defenders, type = "right") %>%
+total <- full_join(attackers, defenders, type = "right", by = "King") %>%
         mutate(n_attact = replace(n_attact,is.na(n_attact),0)) %>%
         mutate(n_total = n_attact + n_defend) %>%
         mutate(perc= n_total/sum(n_total))  %>% 
         arrange(perc) %>%
         mutate(labels = scales::percent(perc))
-ggplot(data = total, aes(x="", y = n_total, fill = king)) +
+ggplot(data = total, aes(x="", y = n_total, fill = King)) +
         geom_bar(stat = "identity", width=1) +
         coord_polar("y", start=0) +
         theme_void() + geom_text(aes(label = labels),
                                  position = position_stack(vjust = 0.5))
 ```
+We can see, Jofferey/Tommaen Baratheon enrolled most of the battles. That makes sense since the Seven Kingdom should be leagally under the reign of house Baratheon. They needed to keep their reign. Robb Stark is second only to Jofferey/Tommaen Baratheon in the number of wars. It's also reasonable since Jofferey kills Eddard Stark, Robb's father. Robb must want to revenge.
+
+```{r}
+attacker_win <- battles_kings %>% filter(attacker_outcome == "win") %>%
+        group_by(attacker_king) %>% summarise( n = n()) %>% 
+        rename(King = attacker_king, nwin_attack = n)
+defender_win <- battles_kings %>% filter(attacker_outcome == "win") %>%
+        group_by(defender_king) %>% summarise( n = n()) %>% 
+        rename(King = defender_king, nwin_defend = n)
+king_win <- full_join(attacker_win, defender_win, type = "right", by = "King") %>%
+          full_join(total, by = "King") %>%
+         mutate(nwin_attack = replace(nwin_attack,is.na(nwin_attack),0)) %>%
+         mutate(nwin = nwin_attack + nwin_defend ) %>%
+         mutate(perc= nwin/sum(n_total))  %>% 
+        arrange(perc) %>%
+        mutate(labels = scales::percent(perc))
+
+ggplot(data = king_win, aes(x ="" , y= perc, fill = King)) + 
+        geom_bar(, stat = "identity",width=1) + 
+        coord_polar("y", start=0) +
+        theme_void() + geom_text(aes(label = labels),
+                                 position = position_stack(vjust = 0.5))
+ggplot(data = king_win, aes(x = nwin , y= King, fill = King)) + 
+        geom_bar(, stat = "identity", show.legend = FALSE) + xlab ("Counts of win")
+```
+
+Joffery/Tommen Baratheon wins the most. It's not difficult to guess the result since the true power holder is Tywin Lannister, who is rich and wily. Robb Stark is a recognized war commander. He would win.
+
+Next, I would like to explore the relationship between size and win. 
+```{r}
+battle_results <- battles %>% 
+        mutate(size_diff = attacker_size - defender_size, 
+               outcome_num = ifelse(attacker_outcome == "win", 1,0))
+
+
+ggplot(data = battle_results, aes(x = attacker_size, y = defender_size, color = attacker_outcome))+
+        geom_point()
+
+```
+
+We can see sometimes attacker could loss even though they prevailed in absolute numbers.
+
+Let's further do a logistic regresion
+```{r}
+# Logistic regression for battle outcome
+logit_fit <- glm(outcome_num ~ size_diff,data = battle_results)
+summary(logit_fit)
+```
+
+The size different between attacker and defender is not significant, but interestingly negative. In other word, higher size different between attacker and defender results in higher odds to lose. Probably size different is not the only effect for winning or losing.
+
+## Cluster analysis for popular characters in GOT
+
+The author, G.R.R. Martin, once said that he had a whole plot in his head before the first line of novel. Writing adds only details to the plot.
+
+These gives us opportunity to suppose that there is a rigid structures within the novel. Let us see, does some known data of given character allow us to know what team he plays in this cruel game.
+
+First of all we attach some libraries and read the data. Then we combine two data sets about character using only those who exists in both sets. We only consider the popular characters (my personal preference lol). Then we normalize all the numbers and mark every observation with allegiances. Missing values are imputedusing the mean.
+
+Finally we remove word “House” from column Allegiances in order to avoid pairs like “House Baratheon” and “Baratheon”.
+
+
+
+```{r,message=FALSE}
+library(rpart)
+library(corrplot)
+library(Hmisc)
+library(reshape2)
+library(fpc)
+library(factoextra)
+library(scales)
+library(plotly)
+
+char <- read.csv("source_data/character-deaths.csv", stringsAsFactors = F)
+char.pred <- read.csv("source_data/character-predictions.csv", stringsAsFactors = F)
+
+names(char.pred)[which(names(char.pred) == "name")] <- "Name"
+
+char1 <- inner_join(char, char.pred, by = "Name")
+char1$age[187] <- 20 #Correction of obvious outlier
+popular  <- char1 %>% filter(isPopular ==1)
+ numb <- popular[, which(sapply(popular,class) != "character")]
+ #numb <- char1[, which(sapply(char1,class) != "character")]
+numb$Death.Year[is.na(numb$Death.Year)]=max(na.omit(numb$Death.Year))+1
+for(i in 1:ncol(numb)) {
+        numb[ , i][is.na(numb[ , i])] <- mean(numb[ , i], na.rm=TRUE)
+}
+
+numb <- as.data.frame(scale(numb))
+numb <- cbind("Allegiances" = popular$Allegiances, numb)
+
+# numb <- cbind("Allegiances" = char1$Allegiances, numb)
+numb$Allegiances <- gsub("House ", "", numb$Allegiances)
+```
+
+We removed most redundant variables and variables with too many missing values. Then calculate the correlation matrix for the variables left. There is no correlation greater than 0.5. We can move forward.
+```{r}
+to.remove <- c("Book.of.Death", "Death.Chapter", "pred", "plod", 
+               "male", "book1", "book2", "book3", "book4", "book5", "isAliveMother", 
+               "isAliveHeir", "isAliveSpouse", "isNoble", 
+               "numDeadRelations", "boolDeadRelations", "isPopular"
+               ,"S.No" ,"DateoFdeath","alive","isAliveFather","dateOfBirth","actual","Death.Year")
+numb <- numb[ , -which(names(numb) %in% to.remove)]
+
+M <- rcorr(as.matrix(numb[,-1]))
+# corrplot(M$r, type="upper")
+# tri <- upper.tri(M$r)
+# corr.values <- data.frame(row = rownames(M$r)[row(M$r)[tri]],
+#                           column = rownames(M$r)[col(M$r)[tri]],
+#                           cor  =(M$r)[tri])
+# corr.values[which(abs(corr.values$cor) > 0.5),]
+
+```
+The importance of the choice a number of clusters can not be overestimated. In a perfect world there could be 12 clusters, one for each house. Or much better it could be 4 clusters according to teams of the game. That is Lannister side, Stark side, Against all and Neutral. Let us add “Team” column to our data set.
+
+
+```{r}
+Lannister.team <- c("Lannister", "Tyrell")
+Stark.team <- c("Arryn", "Baratheon", "Stark", "Tully")
+Against.all.team <- c("Martell", "Greyjoy", "Targaryen", "Wildling")
+Neutral.team <- c("Night's Watch", "None")
+numb$Team <- ifelse(numb$Allegiances %in% Lannister.team, numb$Team <- "Lannister team",
+                    ifelse(numb$Allegiances %in% Stark.team, numb$Team <- "Stark team",
+                           ifelse(numb$Allegiances %in% Against.all.team, 
+                                  numb$Team <- "Against all", "Neutral")))
+table(numb$Team)
+```
+
+To select the most appropriate number of clusters, we repeat n = 2 to 6 for 5 times for each number of clusters and calculate the
+   normalized mutual information between all the clusterings for each
+   different number of clusters.
+
+```{r}
+shannon <- function(tokens){
+        tbl <- table(tokens);
+        p <- (tbl %>% as.numeric())/sum(tbl %>% as.numeric());
+        sum(-p*log(p));
+}
+mutinf <- function(a,b){
+        sa <- shannon(a);
+        sb <- shannon(b);
+        sab <- shannon(sprintf("%d:%d", a, b));
+        sa + sb - sab;
+}
+normalized_mutinf <- function(a,b){
+        2*mutinf(a,b)/(shannon(a)+shannon(b));
+}
+
+set.seed(970103)
+
+data <- numb[,-c(1,14)]
+a <- list()
+for (i in 2:6){
+        r<-mapply(function(x) kmeans(data, centers = i)$cluster,1:5)
+        out <- c()
+        for (j in 1:5){
+                for (k in 1:5){
+                        out <- cbind(out, normalized_mutinf(r[,j], r[,k]))
+                }
+        }
+        a[[i-1]] <- matrix(out,ncol=5)
+}
+
+nmi <- tibble(n.cluster = 2:6, mean.nmi = colMeans(mapply(function(x) (colSums(x)-1)/4, a)))
+ggplot(nmi, aes(x = n.cluster, y = mean.nmi, fill = n.cluster)) +
+        geom_bar(stat = "identity") + 
+        geom_text(aes(label=sprintf("%0.2f", round(mean.nmi, digits = 2))), vjust=-0.5,
+                  colour = '#16338d')
+
+```
+
+From the plot of average value of these mutual informations, we choose 6 as the number of clusters. Let's see how those clusters are distributed among the team:
+```{r}
+# We choose 6 clusetrs
+
+plot.team <- function(data){
+        dat.clust <- melt(cbind(data, Cluster = rownames(data)), id.vars = c('Cluster'))
+        ggplot(dat.clust, aes(x = variable, y = value, fill = Cluster)) + 
+                geom_bar(position = "fill", stat = "identity") + 
+                scale_y_continuous(labels = percent_format()) + 
+                labs(x = "Team", y = "Percentage")
+}
+k6 <- kmeans(data, 6)
+dat.6 <- as.data.frame.matrix(table(k6$cluster, numb$Team))
+plot.team(dat.6)
+```
+
+There is no character in cluster 3 belongs to Neutral team. They seems to be too aggressive? Also, no characters in cluster 5 belongs to Lannister team. I think they might be too noble to stand with the Lannisters. 
+
+Next, let's see a figure of clusters in first component vs second component of PCA.
+
+```{r}
+# rownames(data) <- popular$Name
+fviz_cluster(k6, data = data)
+```
+It looks too messy. I guess that's due to the explained variance is too low for only pc1 and pc2. Hence, let's see a 3-D plot.
+
+```{r}
+pc <- princomp(data, cor=TRUE, scores=TRUE)
+plot_3d <- as_tibble(cbind(pc$scores[,1:3],k6$cluster))
+colnames(plot_3d)[4] <- "Cluster"
+plot_3d$Cluster <- factor(plot_3d$Cluster)
+plot_ly(plot_3d, x=~Comp.1, y=~Comp.2, 
+             z=~Comp.3, color=~Cluster) %>%
+        add_markers(size=1.5)
+
+```
+
+We can see points are clustered.
+
+I also would like to know whether 4 clusters gonna work better. Let's try it.
+```{r}
+k4 <- kmeans(data, 4)
+dat.4 <- as.data.frame.matrix(table(k4$cluster, numb$Team))
+plot.team(dat.4)
+fviz_cluster(k4, data = data)
+```
+
+Seems it still looks messy. The cluster and team doesn't match well.
+
+As we can see, neither six nor four clusters do not correspond to teams of Game of Throne.
+
