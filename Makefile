@@ -1,23 +1,22 @@
 .PHONY: clean
 SHELL: /bin/bash
 
-report.pdf:\
- report.Rmd\
- figures/pie-chart.png
-	Rscript -e "rmarkdown::render('report.Rmd',output_format='pdf_document')"
-	mkdir -p tagged_reports/
-	cp report.pdf tagged_reports/`git log -1 | head -n 1| cut -d' ' -f2`-report.pdf
+Report.html:\
+ Report.Rmd\
+ Report_files/figure-latex/unnamed-chunk-2-1.pdf Report_files/figure-latex/unnamed-chunk-3-1.pdf\
+ Report_files/figure-latex/unnamed-chunk-4-1.pdf Report_files/figure-latex/unnamed-chunk-5-1.pdf\
+ Report_files/figure-latex/unnamed-chunk-7-1.pdf Report_files/figure-latex/unnamed-chunk-9-1.pdf\
+ Report_files/figure-latex/unnamed-chunk-10-1.pdf  Report_files/figure-latex/unnamed-chunk-11-1.pdf\     
+	Rscript -e "rmarkdown::render('Report.Rmd',output_format='html_document')"
 
 clean:
-	rm -f report.pdf
-	rm -f figures/*.png
+	rm -f Report.pdf
 
 
-figures/pie-chart.png\
- utils.R\
- source_data/battles.csv\
+figures/pie-chart.png figures/pie-chart1.png figures/scatter.png: 5-King.R source_data/battles.csv
 	Rscript 5-king.R
-	
-assets/comparison_of_heights_and_weights.png: figures/pie-chart.png
-	cp figures/pie-chart.png assets/pie-chart.png
+
+figures/corrplot.pdf figures/variance_explain.png figures/plot.team.png figures/cluster.pdf: Cluster_Analysis.R source_data/character-deaths.csv source_data/character-predictions.csv
+	Rscript Cluster_Analysis.R	
+
 
