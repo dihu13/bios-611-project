@@ -1,7 +1,4 @@
 FROM rocker/verse
-RUN wget https://sqlite.org/snapshot/sqlite-snapshot-202110132029.tar.gz
-RUN tar xvf sqlite-snapshot-202110132029.tar.gz
-WORKDIR sqlite-snapshot-202110132029
 RUN ./configure && make && make install
 WORKDIR /
 RUN wget https://deb.nodesource.com/setup_16.x 
@@ -30,7 +27,17 @@ RUN R -e "install.packages(\"ppclust\")";
 RUN R -e "install.packages(\"gbm\")";
 RUN R -e "install.packages(\"rdist\")";
 RUN R -e "install.packages(\"caret\")";
-RUN R -e "install.packages(c(\"shiny\",\"plotly\"))";
+RUN R -e "install.packages(c(\"shiny\"))";
+RUN R -e "install.packages(c(\"tidyverse\",\"ggplot2\",\"rpart\"))"
+RUN R -e "install.packages(\"Rcpp\")";
+RUN R -e "install.packages(\"reticulate\")";
+RUN R -e "install.packages(\"corrplot\")";
+RUN R -e "install.packages(\"Hmisc\")";
+RUN R -e "install.packages(\"reshape2\")";
+RUN R -e "install.packages(\"factoextra\")";
+RUN R -e "install.packages(\"scales\")";
+RUN R -e "install.packages(\"plotly\")";
+
 RUN pip3 install jupyter jupyterlab
 RUN R -e "devtools::install_github(\"r-lib/ellipsis\");"
 RUN R -e "install.packages(c('repr', 'IRdisplay', 'evaluate', 'crayon', 'pbdZMQ', 'devtools', 'uuid', 'digest'))"
