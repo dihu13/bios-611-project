@@ -24,7 +24,7 @@ the GOT Dataset.
 
 ### Preliminary Figures
 
-![](assets/pie-chart.png)
+![image](assets/pie-chart.png)
 
 The above figure shows that Joffery/Tommen Baratheon and Robb Stark got involeved most battles. 
 
